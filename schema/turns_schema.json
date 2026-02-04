@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Turn-level Dialogue Dataset",
+  "type": "object",
+  "required": [
+    "example_id",
+    "video_id",
+    "source_video_path",
+    "audio_path",
+    "start_ms",
+    "end_ms",
+    "duration_ms",
+    "speaker",
+    "speaker_source",
+    "transcript",
+    "asr_model",
+    "asr_confidence",
+    "segmentation",
+    "pipeline_version",
+    "created_at"
+  ],
+  "properties": {
+    "example_id": { "type": "string" },
+    "video_id": { "type": "string" },
+    "source_video_path": { "type": "string" },
+    "audio_path": { "type": "string" },
+    "start_ms": { "type": "integer", "minimum": 0 },
+    "end_ms": { "type": "integer", "minimum": 0 },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "speaker": { "type": "string" },
+    "speaker_source": { "type": "string" },
+    "transcript": { "type": "string" },
+    "asr_model": { "type": "string" },
+    "asr_confidence": { "type": ["number", "null"] },
+    "segmentation": {
+      "type": "object",
+      "required": [
+        "method",
+        "vad_mode",
+        "min_speech_ms",
+        "min_silence_ms",
+        "merge_gap_ms"
+      ],
+      "properties": {
+        "method": { "type": "string" },
+        "vad_mode": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "min_speech_ms": { "type": "integer", "minimum": 0 },
+        "min_silence_ms": { "type": "integer", "minimum": 0 },
+        "merge_gap_ms": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "pipeline_version": { "type": "string" },
+    "created_at": { "type": "string" },
+    "errors": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}
