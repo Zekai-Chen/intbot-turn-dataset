@@ -19,3 +19,6 @@ python3 /Users/chenzekai/Desktop/Intbot/pipeline.py
 ## Notes
 - VAD uses 30ms frames, `vad_mode=2`, `min_speech_ms=600`, `merge_gap_ms=800`.
 - `OPENAI_API_KEY` or `OPENAI_API_KEY_FILE` is required for ASR.
+- To reduce cost/latency, use `--skip-asr` to only segment and cut clips first.
+- You can rerun ASR without re-segmentation using `--asr-only` (expects existing segments/audio).
+- Failed ASR calls do not crash the pipeline; errors are recorded in an optional `errors` field.

@@ -154,6 +154,14 @@ def write_segments(path: Path, segments: List[Tuple[int, int]]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
+def read_segments(path: Path) -> List[Tuple[int, int]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    segments = []
+    for s in payload.get("segments", []):
+        segments.append((int(s["start_ms"]), int(s["end_ms"])))
+    return segments
+
+
 def cut_clip(audio_path: Path, start_ms: int, end_ms: int, out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     start_sec = start_ms / 1000.0
@@ -233,6 +241,7 @@ def build_dataset(
     cfg: SegmentConfig,
     clips_dir: Path,
     asr_model: str,
+    do_asr: bool,
 ) -> List[dict]:
     rows = []
     total = len(segments)
@@ -240,8 +249,12 @@ def build_dataset(
         print(f"[{video_id}] turn {idx+1}/{total} {start_ms}-{end_ms}ms")
         clip_name = f"{video_id}_{idx:06d}.wav"
         clip_path = clips_dir / clip_name
-        cut_clip(audio_path, start_ms, end_ms, clip_path)
-        transcript, confidence, error = transcribe_openai(clip_path, asr_model)
+        if not clip_path.exists():
+            cut_clip(audio_path, start_ms, end_ms, clip_path)
+        if do_asr:
+            transcript, confidence, error = transcribe_openai(clip_path, asr_model)
+        else:
+            transcript, confidence, error = "", None, "asr_skipped"
         row = {
             "example_id": f"{video_id}_{idx:06d}",
             "video_id": video_id,
@@ -291,6 +304,16 @@ def main() -> int:
     )
     parser.add_argument("--out", default="/Users/chenzekai/Desktop/Intbot/data")
     parser.add_argument("--asr-model", default="gpt-4o-mini-transcribe")
+    parser.add_argument(
+        "--skip-asr",
+        action="store_true",
+        help="Skip transcription and only segment/cut audio.",
+    )
+    parser.add_argument(
+        "--asr-only",
+        action="store_true",
+        help="Only run ASR using existing segments/audio/clips.",
+    )
     args = parser.parse_args()
 
     ensure_ffmpeg()
@@ -304,16 +327,28 @@ def main() -> int:
 
     all_rows: List[dict] = []
 
+    if args.skip_asr and args.asr_only:
+        raise ValueError("Cannot use --skip-asr and --asr-only together")
+
     for video in args.videos:
         video_path = Path(video)
         if not video_path.exists():
             raise FileNotFoundError(str(video_path))
         video_id = video_path.stem
         audio_path = audio_dir / f"{video_id}.wav"
-        extract_audio(video_path, audio_path)
-        audio_bytes, sample_rate = read_wave(audio_path)
-        segments = vad_segments(audio_bytes, sample_rate, cfg)
-        write_segments(segments_dir / f"{video_id}_segments.json", segments)
+        segments_path = segments_dir / f"{video_id}_segments.json"
+
+        if args.asr_only:
+            if not audio_path.exists():
+                raise FileNotFoundError(str(audio_path))
+            if not segments_path.exists():
+                raise FileNotFoundError(str(segments_path))
+            segments = read_segments(segments_path)
+        else:
+            extract_audio(video_path, audio_path)
+            audio_bytes, sample_rate = read_wave(audio_path)
+            segments = vad_segments(audio_bytes, sample_rate, cfg)
+            write_segments(segments_path, segments)
         rows = build_dataset(
             video_id,
             video_path,
@@ -322,6 +357,7 @@ def main() -> int:
             cfg,
             clips_dir,
             args.asr_model,
+            not args.skip_asr,
         )
         all_rows.extend(rows)
 
@@ -329,7 +365,9 @@ def main() -> int:
     all_rows.sort(key=lambda r: (r["video_id"], r["start_ms"]))
     write_jsonl(dataset_path, all_rows)
 
+    empty_tx = sum(1 for r in all_rows if not r.get("transcript"))
     print(f"Wrote {len(all_rows)} rows to {dataset_path}")
+    print(f"Empty transcripts: {empty_tx}/{len(all_rows)}")
     return 0
 
 
